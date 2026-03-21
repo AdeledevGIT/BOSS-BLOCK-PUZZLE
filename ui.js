@@ -46,6 +46,30 @@ class UIManager {
 
         // Game Actions
         document.getElementById('restart-btn').addEventListener('click', () => this.restartGame());
+
+        // Player Name Sync
+        const nameInput = document.getElementById('player-custom-name');
+        if (nameInput) {
+            nameInput.value = localStorage.getItem('boss_block_username') || '';
+            
+            nameInput.addEventListener('input', (e) => {
+                localStorage.setItem('boss_block_username', e.target.value.trim());
+            });
+            
+            nameInput.addEventListener('change', async (e) => {
+                const newName = e.target.value.trim();
+                if (newName && window.isFirebaseReady() && window.auth && window.auth.currentUser) {
+                    try {
+                        await window.db.collection('leaderboard').doc(window.auth.currentUser.uid).set({
+                            name: newName,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                    } catch (err) {
+                        console.error('Failed to update name on leaderboard:', err);
+                    }
+                }
+            });
+        }
     }
 
     switchScreen(name) {
@@ -149,9 +173,19 @@ class UIManager {
                     let fbScore = 0;
                     if (docSnap.exists) {
                         fbScore = docSnap.data().score || 0;
+                        const fbName = docSnap.data().name;
+                        
+                        // If Firebase has a nice name but the local box is empty, pull it down!
+                        const localName = localStorage.getItem('boss_block_username') || '';
+                        if (fbName && fbName !== 'Anonymous Player' && localName === '') {
+                            localStorage.setItem('boss_block_username', fbName);
+                            const nameInput = document.getElementById('player-custom-name');
+                            if (nameInput) nameInput.value = fbName;
+                        }
                     }
                     
                     const localScore = parseInt(localStorage.getItem('boss_block_highscore')) || 0;
+                    const finalName = localStorage.getItem('boss_block_username') || user.displayName || user.email || 'Anonymous Player';
 
                     if (fbScore > localScore) {
                         // Firebase has a higher score (e.g. played on another device)
@@ -163,7 +197,7 @@ class UIManager {
                     } else if (localScore > fbScore && localScore > 0) {
                         // Local has a higher score (played offline, now connected)
                         await window.db.collection('leaderboard').doc(user.uid).set({
-                            name: user.displayName || user.email || 'Anonymous Player',
+                            name: finalName,
                             score: localScore,
                             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                         }, { merge: true });

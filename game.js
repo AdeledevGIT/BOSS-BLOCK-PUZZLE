@@ -1001,8 +1001,9 @@ class Game {
                     
                     const docSnap = await docRef.get();
                     if (!docSnap.exists || docSnap.data().score < this.score) {
+                        const finalName = localStorage.getItem('boss_block_username') || user.displayName || user.email || 'Anonymous Player';
                         await docRef.set({
-                            name: user.displayName || user.email || 'Anonymous',
+                            name: finalName,
                             score: this.score,
                             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                         }, { merge: true });

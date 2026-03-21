@@ -598,12 +598,38 @@ canvas {
     color: var(--amber);
 }
 
-/* ---- Buttons ---- */
+/* ---- Buttons / Inputs ---- */
 .menu-actions {
     display: flex;
     flex-direction: column;
     gap: 12px;
     margin-bottom: 28px;
+}
+
+#player-custom-name {
+    width: 100%;
+    padding: 14px 20px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--border-hi);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 1.05rem;
+    font-weight: 600;
+    text-align: center;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+#player-custom-name::placeholder {
+    color: var(--text-dim);
+    font-weight: 500;
+}
+
+#player-custom-name:focus {
+    border-color: var(--primary);
+    background: var(--surface-2);
+    box-shadow: 0 0 16px var(--primary-glow);
 }
 
 .cta-btn {
