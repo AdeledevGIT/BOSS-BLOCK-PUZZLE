@@ -12,7 +12,8 @@ class UIManager {
         this.modals = {
             leaderboard: document.getElementById('leaderboard-modal'),
             auth: document.getElementById('auth-modal'),
-            gameOver: document.getElementById('game-over-modal')
+            gameOver: document.getElementById('game-over-modal'),
+            name: document.getElementById('name-modal')
         };
         this.overlay = document.getElementById('overlay');
         this.init();
@@ -41,32 +42,47 @@ class UIManager {
         });
 
         // Auth
-        document.getElementById('google-auth').addEventListener('click', () => this.handleGoogleLogin());
-        document.getElementById('logout-btn').addEventListener('click', () => this.handleLogout());
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) logoutBtn.addEventListener('click', () => this.handleLogout());
 
         // Game Actions
         document.getElementById('restart-btn').addEventListener('click', () => this.restartGame());
 
-        // Player Name Sync
-        const nameInput = document.getElementById('player-custom-name');
-        if (nameInput) {
-            nameInput.value = localStorage.getItem('boss_block_username') || '';
-            
-            nameInput.addEventListener('input', (e) => {
-                localStorage.setItem('boss_block_username', e.target.value.trim());
-            });
-            
-            nameInput.addEventListener('change', async (e) => {
-                const newName = e.target.value.trim();
-                if (newName && window.isFirebaseReady() && window.auth && window.auth.currentUser) {
-                    try {
-                        await window.db.collection('leaderboard').doc(window.auth.currentUser.uid).set({
-                            name: newName,
-                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                        }, { merge: true });
-                    } catch (err) {
-                        console.error('Failed to update name on leaderboard:', err);
-                    }
+        // Player Identity Auto-Generate
+        if (!localStorage.getItem('boss_block_username')) {
+            localStorage.setItem('boss_block_username', 'user' + Math.floor(Math.random() * 10000000));
+        }
+        
+        const displayName = document.getElementById('home-player-name');
+        if (displayName) displayName.textContent = localStorage.getItem('boss_block_username');
+
+        // Edit Name Handler
+        const editNameBtn = document.getElementById('edit-name-btn');
+        if (editNameBtn) editNameBtn.addEventListener('click', () => this.openNameEditor());
+
+        const saveNameBtn = document.getElementById('save-name-action-btn');
+        if (saveNameBtn) saveNameBtn.addEventListener('click', () => this.handleSaveName());
+
+        // Email Auth Toggles and Handlers
+        this.isSignUpMode = false;
+        
+        const authActionBtn = document.getElementById('auth-action-btn');
+        if (authActionBtn) authActionBtn.addEventListener('click', () => this.handleEmailAuth());
+        
+        const authToggleLink = document.getElementById('auth-toggle-link');
+        if (authToggleLink) {
+            authToggleLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.isSignUpMode = !this.isSignUpMode;
+                const toggleText = document.getElementById('auth-toggle-text');
+                if (this.isSignUpMode) {
+                    authActionBtn.textContent = 'Sign Up';
+                    toggleText.textContent = 'Already have an account?';
+                    authToggleLink.textContent = 'Sign In';
+                } else {
+                    authActionBtn.textContent = 'Sign In';
+                    toggleText.textContent = 'Need an account?';
+                    authToggleLink.textContent = 'Sign Up';
                 }
             });
         }
@@ -111,34 +127,48 @@ class UIManager {
         Object.values(this.modals).forEach(m => m.classList.add('hidden'));
     }
 
-    async handleGoogleLogin() {
-        if (!window.isFirebaseReady()) {
-            alert("Firebase not configured. Please set up your credentials in firebase-config.js.");
+    async handleEmailAuth() {
+        if (!window.isFirebaseReady()) return;
+        
+        const email = document.getElementById('auth-email').value.trim();
+        const pwd = document.getElementById('auth-password').value;
+        if (!email || !pwd) {
+            alert('Please enter an email and password.');
             return;
         }
 
-        const provider = new firebase.auth.GoogleAuthProvider();
+        const btn = document.getElementById('auth-action-btn');
+        btn.textContent = 'Processing...';
+
         try {
-            const user = window.auth.currentUser;
-            if (user && user.isAnonymous) {
-                try {
-                    await user.linkWithPopup(provider);
-                } catch (linkError) {
-                    // If the Google account is already linked to another Firestore user
-                    if (linkError.code === 'auth/credential-already-in-use') {
-                        await window.auth.signInWithCredential(linkError.credential);
-                    } else {
-                        throw linkError;
+            if (this.isSignUpMode) {
+                const user = window.auth.currentUser;
+                const credential = firebase.auth.EmailAuthProvider.credential(email, pwd);
+                if (user && user.isAnonymous) {
+                    try {
+                        await user.linkWithCredential(credential);
+                    } catch (linkError) {
+                        if (linkError.code === 'auth/email-already-in-use') {
+                            await window.auth.signInWithCredential(credential);
+                        } else {    
+                            throw linkError;
+                        }
                     }
+                } else {
+                    await window.auth.createUserWithEmailAndPassword(email, pwd);
                 }
             } else {
-                await window.auth.signInWithPopup(provider);
+                await window.auth.signInWithEmailAndPassword(email, pwd);
             }
             
             this.hideAllModals();
+            document.getElementById('auth-email').value = '';
+            document.getElementById('auth-password').value = '';
         } catch (error) {
-            console.error("Login failed:", error);
-            alert("Login failed: " + error.message);
+            console.error("Auth failed:", error);
+            alert("Auth failed: " + error.message);
+        } finally {
+            if (btn) btn.textContent = this.isSignUpMode ? 'Sign Up' : 'Sign In';
         }
     }
 
@@ -152,19 +182,21 @@ class UIManager {
         if (!window.isFirebaseReady()) return;
 
         const userStatus = document.querySelector('.user-status');
-        const googleAuthWrap = document.getElementById('google-auth-wrap');
+        const emailAuthWrap = document.getElementById('email-auth-wrap');
         const userEmail = document.getElementById('user-email');
 
         window.auth.onAuthStateChanged(async user => {
             if (user) {
-                // If they logged in passing Google Auth, hide the button, show their name. Wait... if anonymous, keep the button!
+                // If they logged in passing Auth, hide the button, show their name. Wait... if anonymous, keep the button!
                 if (!user.isAnonymous) {
                     if (userStatus) { userStatus.classList.remove('hidden'); }
-                    if (googleAuthWrap) { googleAuthWrap.classList.add('hidden'); }
-                    if (userEmail) { userEmail.textContent = user.displayName || user.email; }
+                    if (emailAuthWrap) { emailAuthWrap.classList.add('hidden'); }
+                    if (userEmail) { userEmail.textContent = user.email; }
+                    document.getElementById('home-auth-btn').style.display = 'none'; // hide backup pill
                 } else {
                     if (userStatus) { userStatus.classList.add('hidden'); }
-                    if (googleAuthWrap) { googleAuthWrap.classList.remove('hidden'); }
+                    if (emailAuthWrap) { emailAuthWrap.classList.remove('hidden'); }
+                    document.getElementById('home-auth-btn').style.display = 'flex';
                 }
 
                 // Sync Personal High Score bi-directionally (Applies to both Anonymous and Authenticated users!)
@@ -175,12 +207,12 @@ class UIManager {
                         fbScore = docSnap.data().score || 0;
                         const fbName = docSnap.data().name;
                         
-                        // If Firebase has a nice name but the local box is empty, pull it down!
+                        // If Firebase has a nice name but the local context doesn't have it, pull it down!
                         const localName = localStorage.getItem('boss_block_username') || '';
-                        if (fbName && fbName !== 'Anonymous Player' && localName === '') {
+                        if (fbName && fbName !== 'Anonymous Player' && (!localName.startsWith('user') || localName === '')) {
                             localStorage.setItem('boss_block_username', fbName);
-                            const nameInput = document.getElementById('player-custom-name');
-                            if (nameInput) nameInput.value = fbName;
+                            const nameDisplay = document.getElementById('home-player-name');
+                            if (nameDisplay) nameDisplay.textContent = fbName;
                         }
                     }
                     
@@ -255,14 +287,26 @@ class UIManager {
                 const item = document.createElement('div');
                 item.className = 'rank-item';
                 
+                const isMe = window.auth && window.auth.currentUser && window.auth.currentUser.uid === doc.id;
+                
                 const medal = index < 3 ? medals[index] : '';
                 item.innerHTML = `
                     <span class="rank-medal">${medal || ''}</span>
                     <span class="rank-num" style="${index < 3 ? 'display:none' : ''}">${index + 1}</span>
-                    <span class="rank-name">${data.name || 'Anonymous'}</span>
+                    <span class="rank-name" ${isMe ? 'id="leaderboard-my-name" style="cursor:pointer; color:var(--primary);" title="Click to edit your name"' : ''}>
+                        ${data.name || 'Anonymous Player'} 
+                        ${isMe ? '<span style="opacity:0.6;font-size:0.8em;margin-left:4px;">✎</span>' : ''}
+                    </span>
                     <span class="rank-score">${data.score.toLocaleString()}</span>
                 `;
                 listContainer.appendChild(item);
+
+                if (isMe) {
+                    const myNameEl = item.querySelector('#leaderboard-my-name');
+                    myNameEl.addEventListener('click', () => {
+                        this.openNameEditor(myNameEl);
+                    });
+                }
             });
         } catch (error) {
             console.error('Error fetching leaderboard:', error);
@@ -282,6 +326,42 @@ class UIManager {
                 window.gameInstance.generateShapes();
                 window.gameInstance.updateUI();
             });
+        }
+    }
+
+    openNameEditor(elementToUpdate = null) {
+        this.elementToUpdateWithNewName = elementToUpdate;
+        const current = localStorage.getItem('boss_block_username') || '';
+        const input = document.getElementById('new-name-input');
+        if (input) input.value = current;
+        this.showModal('name');
+    }
+
+    async handleSaveName() {
+        const input = document.getElementById('new-name-input');
+        if (!input) return;
+        const newName = input.value;
+        if (newName && newName.trim().length > 0) {
+            const cleanName = newName.trim().substring(0, 15);
+            localStorage.setItem('boss_block_username', cleanName);
+            
+            if (this.elementToUpdateWithNewName) {
+                this.elementToUpdateWithNewName.innerHTML = `${cleanName} <span style="opacity:0.6;font-size:0.8em;margin-left:4px;">✎</span>`;
+            }
+            const homeName = document.getElementById('home-player-name');
+            if (homeName) homeName.textContent = cleanName;
+            
+            if (window.isFirebaseReady() && window.auth && window.auth.currentUser) {
+                try {
+                    await window.db.collection('leaderboard').doc(window.auth.currentUser.uid).set({
+                        name: cleanName,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                } catch(err) {
+                    console.error('Failed to update name online:', err);
+                }
+            }
+            this.hideAllModals();
         }
     }
 }
