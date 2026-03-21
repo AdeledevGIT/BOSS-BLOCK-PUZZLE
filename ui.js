@@ -95,8 +95,22 @@ class UIManager {
 
         const provider = new firebase.auth.GoogleAuthProvider();
         try {
-            await window.auth.signInWithPopup(provider);
-            this.updateAuthStatus();
+            const user = window.auth.currentUser;
+            if (user && user.isAnonymous) {
+                try {
+                    await user.linkWithPopup(provider);
+                } catch (linkError) {
+                    // If the Google account is already linked to another Firestore user
+                    if (linkError.code === 'auth/credential-already-in-use') {
+                        await window.auth.signInWithCredential(linkError.credential);
+                    } else {
+                        throw linkError;
+                    }
+                }
+            } else {
+                await window.auth.signInWithPopup(provider);
+            }
+            
             this.hideAllModals();
         } catch (error) {
             console.error("Login failed:", error);
@@ -119,11 +133,17 @@ class UIManager {
 
         window.auth.onAuthStateChanged(async user => {
             if (user) {
-                if (userStatus) { userStatus.classList.remove('hidden'); }
-                if (googleAuthWrap) { googleAuthWrap.classList.add('hidden'); }
-                if (userEmail) { userEmail.textContent = user.displayName || user.email; }
+                // If they logged in passing Google Auth, hide the button, show their name. Wait... if anonymous, keep the button!
+                if (!user.isAnonymous) {
+                    if (userStatus) { userStatus.classList.remove('hidden'); }
+                    if (googleAuthWrap) { googleAuthWrap.classList.add('hidden'); }
+                    if (userEmail) { userEmail.textContent = user.displayName || user.email; }
+                } else {
+                    if (userStatus) { userStatus.classList.add('hidden'); }
+                    if (googleAuthWrap) { googleAuthWrap.classList.remove('hidden'); }
+                }
 
-                // Sync Personal High Score bi-directionally
+                // Sync Personal High Score bi-directionally (Applies to both Anonymous and Authenticated users!)
                 try {
                     const docSnap = await window.db.collection('leaderboard').doc(user.uid).get();
                     let fbScore = 0;
@@ -143,7 +163,7 @@ class UIManager {
                     } else if (localScore > fbScore && localScore > 0) {
                         // Local has a higher score (played offline, now connected)
                         await window.db.collection('leaderboard').doc(user.uid).set({
-                            name: user.displayName || user.email || 'Anonymous',
+                            name: user.displayName || user.email || 'Anonymous Player',
                             score: localScore,
                             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                         }, { merge: true });
@@ -154,6 +174,11 @@ class UIManager {
             } else {
                 if (userStatus) { userStatus.classList.add('hidden'); }
                 if (googleAuthWrap) { googleAuthWrap.classList.remove('hidden'); }
+
+                // Force Auto-login Anonymously so all players get a database record
+                window.auth.signInAnonymously().catch(err => {
+                    console.error("Anonymous authentication failed:", err);
+                });
             }
         });
     }
