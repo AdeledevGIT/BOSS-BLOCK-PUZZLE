@@ -4,7 +4,7 @@
     "description": "An aesthetic block puzzle game with global leaderboards, boss battles, and dynamic themes. Drop blocks, clear lines, beat the world!",
     "start_url": "/index.html",
     "display": "standalone",
-    "background_color": "#0d2035",
+    "background_color": "#00000",
     "theme_color": "#1dc99a",
     "orientation": "portrait-primary",
     "categories": [
@@ -14,15 +14,15 @@
     "lang": "en",
     "icons": [
         {
-            "src": "icon.svg",
+            "src": "icon-192.png",
             "sizes": "192x192",
-            "type": "image/svg+xml",
+            "type": "image/png",
             "purpose": "any maskable"
         },
         {
-            "src": "icon.svg",
+            "src": "icon-512.png",
             "sizes": "512x512",
-            "type": "image/svg+xml",
+            "type": "image/png",
             "purpose": "any maskable"
         }
     ]
