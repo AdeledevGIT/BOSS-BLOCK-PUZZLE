@@ -315,10 +315,9 @@ class Game {
         
         this.grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
         this.score = 0;
-        this.userHighScore = parseInt(localStorage.getItem('boss_block_highscore') || 0);
-        this.worldHighRun = parseInt(localStorage.getItem('boss_block_highscore') || 0);
+        this.userHighScore = parseInt(localStorage.getItem('boss_block_highscore')) || 0;
+        this.worldHighRun = parseInt(localStorage.getItem('boss_block_worldrecord')) || this.userHighScore;
         this.comboCount = 0;
-        this.worldHighRun = 0;
         this.activeShapes = [null, null, null];
         this.draggingShape = null;
         this.draggingFromSlot = -1;
@@ -974,8 +973,11 @@ class Game {
 
     loadLocalHighScore() {
         const local = localStorage.getItem('boss_block_highscore') || 0;
-        this.worldHighRun = parseInt(local) || 0;
-        this.userHighScore = this.worldHighRun;
+        this.userHighScore = parseInt(local) || 0;
+        
+        const world = localStorage.getItem('boss_block_worldrecord') || this.userHighScore;
+        this.worldHighRun = parseInt(world) || 0;
+        
         if (this.worldScoreDisplay) {
             this.worldScoreDisplay.textContent = this.worldHighRun.toString().padStart(6, '0');
         }
@@ -984,17 +986,38 @@ class Game {
         }
     }
 
-    handleHighScores() {
+    async handleHighScores() {
         // Update user's best score if current score is higher
         if (this.score > this.userHighScore) {
             this.userHighScore = this.score;
             localStorage.setItem('boss_block_highscore', this.score);
+
+            // Sync high score to Firebase Cloud if user is signed in
+            if (window.isFirebaseReady && window.isFirebaseReady() && window.auth && window.auth.currentUser) {
+                try {
+                    const user = window.auth.currentUser;
+                    const db = window.db;
+                    const docRef = db.collection('leaderboard').doc(user.uid);
+                    
+                    const docSnap = await docRef.get();
+                    if (!docSnap.exists || docSnap.data().score < this.score) {
+                        await docRef.set({
+                            name: user.displayName || user.email || 'Anonymous',
+                            score: this.score,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                        console.log("🔥 High score successfully saved to Firebase!");
+                    }
+                } catch (err) {
+                    console.error("Failed to save high score to Firebase:", err);
+                }
+            }
         }
         
-        // Update world high run if current score is higher
+        // Update world high run locally (fall-back sync)
         if (this.score > this.worldHighRun) {
             this.worldHighRun = this.score;
-            localStorage.setItem('boss_block_highscore', this.score);
+            localStorage.setItem('boss_block_worldrecord', this.score);
         }
     }
 }

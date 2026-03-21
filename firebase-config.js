@@ -3,12 +3,13 @@
 
 // Firebase Configuration (Replace with your own project config from Firebase Console)
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCwosiyKyD_IM4SUyqkGxtn2S7DywhaZGo",
+  authDomain: "vendors-9e043.firebaseapp.com",
+  projectId: "vendors-9e043",
+  storageBucket: "vendors-9e043.firebasestorage.app",
+  messagingSenderId: "376905481477",
+  appId: "1:376905481477:web:352419e10b7c4f58cf0b6c",
+  measurementId: "G-8KQ8KME88J"
 };
 
 // Initialize Firebase

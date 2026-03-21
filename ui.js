@@ -62,10 +62,12 @@ class UIManager {
 
     updateHomeStats() {
         const highScore = localStorage.getItem('boss_block_highscore') || '0';
-        const worldEl = document.getElementById('home-world-record');
-        if (worldEl) worldEl.textContent = parseInt(highScore).toString().padStart(6, '0');
-        
         const lastScore = localStorage.getItem('boss_block_last_score') || '0';
+        const worldRecord = localStorage.getItem('boss_block_worldrecord') || highScore;
+        
+        const worldEl = document.getElementById('home-world-record');
+        if (worldEl) worldEl.textContent = parseInt(worldRecord).toString().padStart(6, '0');
+        
         const lastEl = document.getElementById('home-last-score');
         if (lastEl) lastEl.textContent = parseInt(lastScore).toString().padStart(6, '0');
     }
@@ -115,11 +117,40 @@ class UIManager {
         const googleAuthWrap = document.getElementById('google-auth-wrap');
         const userEmail = document.getElementById('user-email');
 
-        window.auth.onAuthStateChanged(user => {
+        window.auth.onAuthStateChanged(async user => {
             if (user) {
                 if (userStatus) { userStatus.classList.remove('hidden'); }
                 if (googleAuthWrap) { googleAuthWrap.classList.add('hidden'); }
                 if (userEmail) { userEmail.textContent = user.displayName || user.email; }
+
+                // Sync Personal High Score bi-directionally
+                try {
+                    const docSnap = await window.db.collection('leaderboard').doc(user.uid).get();
+                    let fbScore = 0;
+                    if (docSnap.exists) {
+                        fbScore = docSnap.data().score || 0;
+                    }
+                    
+                    const localScore = parseInt(localStorage.getItem('boss_block_highscore')) || 0;
+
+                    if (fbScore > localScore) {
+                        // Firebase has a higher score (e.g. played on another device)
+                        localStorage.setItem('boss_block_highscore', fbScore);
+                        if (window.gameInstance) {
+                            window.gameInstance.userHighScore = fbScore;
+                            window.gameInstance.updateUI();
+                        }
+                    } else if (localScore > fbScore && localScore > 0) {
+                        // Local has a higher score (played offline, now connected)
+                        await window.db.collection('leaderboard').doc(user.uid).set({
+                            name: user.displayName || user.email || 'Anonymous',
+                            score: localScore,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                    }
+                } catch (e) {
+                    console.error("Failed to sync personal highest score:", e);
+                }
             } else {
                 if (userStatus) { userStatus.classList.add('hidden'); }
                 if (googleAuthWrap) { googleAuthWrap.classList.remove('hidden'); }
@@ -145,6 +176,18 @@ class UIManager {
                 listContainer.innerHTML = '<p style="text-align:center;color:#475569;padding:2rem 0">No world records yet!<br>Be the first to set one.</p>';
                 return;
             }
+
+            // Save the #1 World Record to local storage and update Game
+            const topScore = snapshot.docs[0].data().score || 0;
+            localStorage.setItem('boss_block_worldrecord', topScore);
+            if (window.gameInstance && topScore > window.gameInstance.worldHighRun) {
+                window.gameInstance.worldHighRun = topScore;
+                window.gameInstance.updateUI();
+            }
+            
+            // Also update home screen directly if visible
+            const worldEl = document.getElementById('home-world-record');
+            if (worldEl) worldEl.textContent = topScore.toString().padStart(6, '0');
 
             const medals = ['🥇','🥈','🥉'];
 
