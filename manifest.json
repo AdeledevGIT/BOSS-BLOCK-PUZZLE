@@ -1,0 +1,17 @@
+{
+    "name": "Boss Block Puzzle",
+    "short_name": "Boss Block",
+    "description": "An aesthetic puzzle game with global leaderboards and dynamic themes.",
+    "start_url": "/index.html",
+    "display": "standalone",
+    "background_color": "#0d2035",
+    "theme_color": "#1dc99a",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "icon.svg",
+            "sizes": "192x192 512x512",
+            "type": "image/svg+xml"
+        }
+    ]
+}
