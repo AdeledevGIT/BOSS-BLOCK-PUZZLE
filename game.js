@@ -161,6 +161,146 @@ const SHAPES = [
     { name: 'I', matrix: [[1], [1], [1], [1]], colorId: 6 }
 ];
 
+class AudioManager {
+    constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.bgmInterval = null;
+        this.isMuted = false;
+        this.isInitialized = false;
+    }
+
+    init() {
+        if (this.isInitialized) {
+            // Ensure context is running if already initialized
+            if (this.ctx && this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+            return;
+        }
+        
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        
+        this.ctx = new AudioContext();
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = 0.8; // Increased master volume
+        this.masterGain.connect(this.ctx.destination);
+        
+        this.isInitialized = true;
+        this.startBGM();
+    }
+    
+    startBGM() {
+        if (!this.ctx) return;
+        
+        // A relaxing pentatonic scale (C Major)
+        const C3 = 130.81, G3 = 196.00;
+        const C4 = 261.63, D4 = 293.66, E4 = 329.63, G4 = 392.00, A4 = 440.00;
+        const C5 = 523.25, D5 = 587.33, E5 = 659.25, G5 = 783.99;
+        
+        // A gentle 32-step musical sequence (0 = rest/pause)
+        const melody = [
+            E4,  0, G4, A4, C5,  0, D5, E5,
+            G5,  0, E5, D5, C5,  0, A4,  0,
+            C4, D4, E4,  0, G4,  0, A4, C5,
+            D5, C5, A4, G4, E4,  0, D4, C4
+        ];
+        
+        let step = 0;
+        
+        this.bgmInterval = setInterval(() => {
+            if (this.isMuted || !this.ctx) return;
+            if (this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+            
+            // 1. Play the main melody note
+            const freq = melody[step];
+            if (freq !== 0) {
+                // Higher volume for the main melody
+                this.playPluck(freq, 0.15, 2.0);
+            }
+            
+            // 2. Play a soft bass drone note every 16 steps to anchor the song
+            if (step % 16 === 0) {
+                const bassFreq = (step === 0) ? C3 : G3;
+                this.playPluck(bassFreq, 0.1, 4.0);
+            }
+            
+            step = (step + 1) % melody.length;
+        }, 320); // 320ms per step = nice, calming pace
+    }
+    
+    playPluck(freq, volume, duration) {
+        if (this.isMuted || !this.ctx) return;
+        
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        // Sine gives a pure, gentle music-box / harp sound
+        osc.type = 'sine'; 
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        
+        // Pluck envelope: quick fade-in, long smooth fade-out
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(volume, this.ctx.currentTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+        
+        // Soften the high frequencies so it doesn't pierce
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1200; 
+        
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+        
+        osc.start(this.ctx.currentTime);
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    playReactionSound(reactionIndex) {
+        if (this.isMuted || !this.ctx) return;
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+        
+        // C Major Pentatonic higher octaves (uplifting chimes)
+        const baseNotes = [392.00, 523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98, 2093.00];
+        const noteCount = Math.min(3 + reactionIndex, 8);
+        const startIdx = Math.min(reactionIndex, 3);
+        
+        const now = this.ctx.currentTime;
+        
+        for (let i = 0; i < noteCount; i++) {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            // "sine" waves in high registers sound like soft bells/chimes
+            osc.type = 'sine'; 
+            let noteIdx = startIdx + i;
+            if(noteIdx >= baseNotes.length) noteIdx = baseNotes.length - 1;
+            
+            osc.frequency.setValueAtTime(baseNotes[noteIdx], now + (i * 0.08));
+            
+            gain.gain.setValueAtTime(0, now + (i * 0.08));
+            gain.gain.linearRampToValueAtTime(0.25, now + (i * 0.08) + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.08) + 1.2);
+            
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            
+            osc.start(now + (i * 0.08));
+            osc.stop(now + (i * 0.08) + 1.2);
+        }
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
@@ -185,6 +325,8 @@ class Game {
         this.isGameOver = false;
         this.currentTheme = 0; // 0=night, 1=day, 2=ocean, 3=desert, 4=space, 5=village, 6=forest, 7=sunset, 8=cloudy, 9=crystal, 10=aurora
         this.lastClearTheme = null; // Prevent multiple theme switches on same clear
+
+        this.audioManager = new AudioManager();
 
         this.init();
     }
@@ -497,6 +639,8 @@ class Game {
     }
 
     startDragging(e, slotIndex) {
+        this.audioManager.init(); // Initialize audio on first user interaction
+        
         if (!this.activeShapes[slotIndex]) return;
         if (e.type === 'touchstart') e.preventDefault();
         
@@ -737,7 +881,10 @@ class Game {
 
     triggerReaction(count) {
         const words = ["NICE!", "GREAT!", "AMAZING!", "BOSSED IT!", "UNREAL! 🔥", "LEGENDARY!"];
-        const word = words[Math.min(count - 1 + this.comboCount, words.length - 1)];
+        const reactionIndex = Math.min(count - 1 + this.comboCount, words.length - 1);
+        const word = words[reactionIndex];
+        
+        this.audioManager.playReactionSound(reactionIndex); // Play beautiful reaction chimes!
         
         const span = document.createElement('div');
         span.className = 'floating-text';
