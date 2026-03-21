@@ -4,7 +4,8 @@
  */
 
 const GRID_SIZE = 8;
-const BLOCK_GAP = 4;
+const BLOCK_GAP = 0;   // No gap — grid is one solid box split by lines
+const CELL_PAD = 2;    // Inner padding per cell so blocks don't touch lines
 const COMBO_POINTS = 100;
 
 // Progressive difficulty shapes
@@ -198,18 +199,44 @@ class Game {
         console.log("🎮 Game initialized.");
     }
 
-    setupCanvas() {
-        const container = this.canvas.parentElement;
-        const containerW = container.clientWidth;
-        const containerH = container.clientHeight;
-        const size = Math.min(containerW, containerH);
+    setupCanvas(onReady) {
+        // Measure the #game-container (reliable parent) rather than the
+        // board-container which has no explicit CSS dimensions yet.
+        const gameContainer = document.getElementById('game-container');
+        const gcRect = gameContainer.getBoundingClientRect();
+
+        // If the layout hasn't happened yet, retry on the next frame
+        if (gcRect.width === 0 || gcRect.height === 0) {
+            requestAnimationFrame(() => this.setupCanvas(onReady));
+            return;
+        }
+
+        const BORDER = 4; // board-container has 2px border on each side (box-sizing: border-box)
+
+        // Canvas size: 85% of container width, capped by container height.
+        // Subtract BORDER so the canvas fits perfectly inside the border.
+        const padding = 8;
+        const rawSize = Math.min(gcRect.width * 0.85, gcRect.height - padding) - BORDER;
+        const size = Math.floor(rawSize);
+
+        // Board-container = canvas size + border, so inner content = canvas size exactly
+        const boardContainer = this.canvas.parentElement;
+        boardContainer.style.width  = `${size + BORDER}px`;
+        boardContainer.style.height = `${size + BORDER}px`;
+
+        // Size the canvas to exactly fill the board-container's inner content area
         const pxRatio = window.devicePixelRatio || 1;
         this.canvas.width  = size * pxRatio;
         this.canvas.height = size * pxRatio;
         this.canvas.style.width  = `${size}px`;
         this.canvas.style.height = `${size}px`;
         this.ctx.scale(pxRatio, pxRatio);
-        this.blockSize = (size - (BLOCK_GAP * (GRID_SIZE + 1))) / GRID_SIZE;
+
+        // Store for drawGrid and hit-testing
+        this.boardSize = size;
+        this.blockSize = size / GRID_SIZE;
+
+        if (typeof onReady === 'function') onReady();
     }
 
     getDifficultyTier() {
@@ -346,31 +373,53 @@ class Game {
         ctx.closePath();
         ctx.fillStyle = color;
         ctx.fill();
-        
-        // Inner detail for premium look
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.fillRect(x + 5, y + 5, width / 2, 2);
     }
 
     drawGrid() {
+        const size = this.boardSize;
+        if (!size) return; // Not yet measured — skip until setupCanvas completes
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
+
+        // --- 1. Solid board background (sharp corners — no radius) ---
+        const style = getComputedStyle(document.body);
+        this.ctx.fillStyle = style.getPropertyValue('--board-bg').trim() || 'rgba(4,13,24,0.95)';
+        this.ctx.fillRect(0, 0, size, size);
+
+        // --- 2. Grid dividing lines ---
+        const lineColor = style.getPropertyValue('--board-line').trim() || 'rgba(29,201,154,0.25)';
+        this.ctx.strokeStyle = lineColor;
+        this.ctx.lineWidth = 1;
+        this.ctx.globalAlpha = 0.6;
+
+        for (let i = 1; i < GRID_SIZE; i++) {
+            const pos = i * this.blockSize;
+            // Vertical line
+            this.ctx.beginPath();
+            this.ctx.moveTo(pos, 0);
+            this.ctx.lineTo(pos, size);
+            this.ctx.stroke();
+            // Horizontal line
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, pos);
+            this.ctx.lineTo(size, pos);
+            this.ctx.stroke();
+        }
+        this.ctx.globalAlpha = 1.0;
+
+        // --- 3. Draw filled blocks ---
         for (let r = 0; r < GRID_SIZE; r++) {
             for (let c = 0; c < GRID_SIZE; c++) {
-                const x = BLOCK_GAP + c * (this.blockSize + BLOCK_GAP);
-                const y = BLOCK_GAP + r * (this.blockSize + BLOCK_GAP);
-                
                 if (this.grid[r][c] !== 0) {
                     const colors = getBlockColors();
                     const color = colors[this.grid[r][c]];
+                    const x = c * this.blockSize + CELL_PAD;
+                    const y = r * this.blockSize + CELL_PAD;
+                    const w = this.blockSize - CELL_PAD * 2;
                     // Glow
-                    this.ctx.shadowBlur = 12;
+                    this.ctx.shadowBlur = 10;
                     this.ctx.shadowColor = color;
-                    this.drawRoundedRect(this.ctx, x, y, this.blockSize, this.blockSize, 9, color);
+                    this.drawRoundedRect(this.ctx, x, y, w, w, 6, color);
                     this.ctx.shadowBlur = 0;
-                } else {
-                    // Empty cell — subtle grid lines only
-                    this.drawRoundedRect(this.ctx, x, y, this.blockSize, this.blockSize, 9, 'rgba(255,255,255,0.04)');
                 }
             }
         }
@@ -388,18 +437,21 @@ class Game {
     drawGhostPreview() {
         const { x, y, shape } = this.draggingShape;
         const rect = this.canvas.getBoundingClientRect();
-        
-        const gridX = Math.round((x - rect.left - (shape.matrix[0].length * this.blockSize / 2)) / (this.blockSize + BLOCK_GAP));
-        const gridY = Math.round((y - rect.top - (shape.matrix.length * this.blockSize / 2) - 50) / (this.blockSize + BLOCK_GAP));
+        const scaleX = this.boardSize / rect.width;
+        const scaleY = this.boardSize / rect.height;
+
+        const gridX = Math.floor((x - rect.left) * scaleX / this.blockSize - shape.matrix[0].length / 2 + 0.5);
+        const gridY = Math.floor((y - rect.top - 50) * scaleY / this.blockSize - shape.matrix.length / 2 + 0.5);
 
         if (this.canPlace(shape, gridX, gridY)) {
-            this.ctx.globalAlpha = 0.3;
+            this.ctx.globalAlpha = 0.35;
             shape.matrix.forEach((row, r) => {
                 row.forEach((cell, c) => {
                     if (cell) {
-                        const drawX = BLOCK_GAP + (gridX + c) * (this.blockSize + BLOCK_GAP);
-                        const drawY = BLOCK_GAP + (gridY + r) * (this.blockSize + BLOCK_GAP);
-                        this.drawRoundedRect(this.ctx, drawX, drawY, this.blockSize, this.blockSize, 8, getBlockColors()[shape.colorId]);
+                        const drawX = (gridX + c) * this.blockSize + CELL_PAD;
+                        const drawY = (gridY + r) * this.blockSize + CELL_PAD;
+                        const w = this.blockSize - CELL_PAD * 2;
+                        this.drawRoundedRect(this.ctx, drawX, drawY, w, w, 6, getBlockColors()[shape.colorId]);
                     }
                 });
             });
@@ -410,18 +462,18 @@ class Game {
     drawDraggingShape() {
         const { x, y, shape } = this.draggingShape;
         const rect = this.canvas.getBoundingClientRect();
-        
-        // Calculate grid position for ghost effect/preview
-        const gridX = Math.round((x - rect.left) / (this.blockSize + BLOCK_GAP) - shape.matrix[0].length / 2);
-        const gridY = Math.round((y - rect.top) / (this.blockSize + BLOCK_GAP) - shape.matrix.length / 2);
+        const scaleX = this.boardSize / rect.width;
+        const scaleY = this.boardSize / rect.height;
+        const bs = this.blockSize;
+        const w = bs - CELL_PAD * 2;
 
-        // Draw actual dragging shape following mouse
+        // Draw actual dragging shape following the pointer, lifted above finger
         shape.matrix.forEach((row, rIdx) => {
             row.forEach((cell, cIdx) => {
                 if (cell) {
-                    const drawX = x - rect.left + (cIdx - shape.matrix[0].length / 2) * this.blockSize;
-                    const drawY = y - rect.top + (rIdx - shape.matrix.length / 2) * this.blockSize - 50; // Lift above finger
-                    this.drawRoundedRect(this.ctx, drawX, drawY, this.blockSize, this.blockSize, 8, getBlockColors()[shape.colorId]);
+                    const drawX = (x - rect.left) * scaleX + (cIdx - shape.matrix[0].length / 2) * bs + CELL_PAD;
+                    const drawY = (y - rect.top) * scaleY + (rIdx - shape.matrix.length / 2) * bs - 50 * scaleY + CELL_PAD;
+                    this.drawRoundedRect(this.ctx, drawX, drawY, w, w, 6, getBlockColors()[shape.colorId]);
                 }
             });
         });
@@ -471,10 +523,12 @@ class Game {
         
         const rect = this.canvas.getBoundingClientRect();
         const pointer = e.type === 'touchend' ? e.changedTouches[0] : e;
-        
-        // Calculate placement position
-        const gridX = Math.round((pointer.clientX - rect.left - (this.draggingShape.shape.matrix[0].length * this.blockSize / 2)) / (this.blockSize + BLOCK_GAP));
-        const gridY = Math.round((pointer.clientY - rect.top - (this.draggingShape.shape.matrix.length * this.blockSize / 2) - 50) / (this.blockSize + BLOCK_GAP));
+        const scaleX = this.boardSize / rect.width;
+        const scaleY = this.boardSize / rect.height;
+
+        // Calculate placement position (snap to grid)
+        const gridX = Math.floor((pointer.clientX - rect.left) * scaleX / this.blockSize - this.draggingShape.shape.matrix[0].length / 2 + 0.5);
+        const gridY = Math.floor((pointer.clientY - rect.top - 50) * scaleY / this.blockSize - this.draggingShape.shape.matrix.length / 2 + 0.5);
 
         if (this.canPlace(this.draggingShape.shape, gridX, gridY)) {
             this.placeShape(this.draggingShape.shape, gridX, gridY);

@@ -171,13 +171,15 @@ class UIManager {
     restartGame() {
         this.hideAllModals();
         if (window.gameInstance) {
-            window.gameInstance.setupCanvas(); // Reset size for current layout
-            window.gameInstance.grid = Array(8).fill().map(() => Array(8).fill(0));
-            window.gameInstance.score = 0;
-            window.gameInstance.isGameOver = false;
-            window.gameInstance.activeShapes = [null, null, null];
-            window.gameInstance.generateShapes();
-            window.gameInstance.updateUI();
+            // Pass reset logic as onReady callback — runs after canvas is fully sized
+            window.gameInstance.setupCanvas(() => {
+                window.gameInstance.grid = Array(8).fill().map(() => Array(8).fill(0));
+                window.gameInstance.score = 0;
+                window.gameInstance.isGameOver = false;
+                window.gameInstance.activeShapes = [null, null, null];
+                window.gameInstance.generateShapes();
+                window.gameInstance.updateUI();
+            });
         }
     }
 }
