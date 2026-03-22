@@ -1,5 +1,6 @@
 {
     "name": "Boss Block Puzzle",
+    "id": "boss-block-puzzle",
     "short_name": "Boss Block",
     "start_url": "index.html",
     "display": "fullscreen",
