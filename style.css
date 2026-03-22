@@ -466,7 +466,7 @@ canvas {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 32px;
-    padding-top: 8px;
+    padding-top: 30px;
 }
 
 .user-identity {
@@ -785,6 +785,7 @@ canvas {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(4px);
     min-width: 80px;
+    margin-top: 30px;
 }
 
 .current-score .score-label {
@@ -819,6 +820,7 @@ canvas {
     flex-shrink: 0;
     transition: background 0.18s, color 0.18s;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    margin-top: 30px;
 }
 
 .back-btn:hover {
