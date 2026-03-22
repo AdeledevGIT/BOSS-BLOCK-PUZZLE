@@ -1,29 +1,25 @@
 {
-    "name": "Boss Block Puzzle",
-    "short_name": "Boss Block",
-    "description": "An aesthetic block puzzle game with global leaderboards, boss battles, and dynamic themes. Drop blocks, clear lines, beat the world!",
-    "start_url": "/index.html",
+    "name": "Adsearns",
+    "short_name": "App",
+    "start_url": "index.html",
     "display": "standalone",
-    "background_color": "#00000",
-    "theme_color": "#1dc99a",
-    "orientation": "portrait-primary",
-    "categories": [
-        "games",
-        "puzzle"
-    ],
-    "lang": "en",
+    "background_color": "#000000",
+    "theme_color": "#000000",
     "icons": [
         {
             "src": "icon1.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any maskable"
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icon1.png",
+            "sizes": "256x256",
+            "type": "image/png"
         },
         {
             "src": "icon1.png",
             "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any maskable"
+            "type": "image/png"
         }
     ]
 }
