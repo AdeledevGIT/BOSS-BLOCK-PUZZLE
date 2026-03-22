@@ -6,6 +6,12 @@
     "description": "Boss Block is an addictive drag-and-drop block puzzle game. Place falling pieces, clear full lines to score, chain combos for massive points, and compete on the live world leaderboard. Free to play, works offline, and syncs your best score across devices.",
     "background_color": "#000000",
     "theme_color": "#000000",
+    "orientation": "portrait-primary",
+    "categories": [
+        "games",
+        "puzzle"
+    ],
+    "lang": "en",
     "icons": [
         {
             "src": "icon1.png",
