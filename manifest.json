@@ -1,6 +1,6 @@
 {
-    "name": "Adsearns",
-    "short_name": "App",
+    "name": "Boss Block Puzzle",
+    "short_name": "Boss Block",
     "start_url": "index.html",
     "display": "standalone",
     "background_color": "#000000",
