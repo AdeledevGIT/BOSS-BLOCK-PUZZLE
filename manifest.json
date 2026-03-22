@@ -26,21 +26,21 @@
     "screenshots": [
         {
             "src": "Screenshot.jpeg",
-            "sizes": "279x564",
+            "sizes": "272x570",
             "type": "image/jpeg",
             "form_factor": "narrow",
             "label": "Boss Block Puzzle – home screen"
         },
         {
             "src": "Screenshot2.jpeg",
-            "sizes": "279x564",
+            "sizes": "272x570",
             "type": "image/jpeg",
             "form_factor": "narrow",
             "label": "Boss Block Puzzle – home screen"
         },
         {
             "src": "Screenshot1.jpeg",
-            "sizes": "279x564",
+            "sizes": "272x570",
             "type": "image/jpeg",
             "form_factor": "narrow",
             "label": "Boss Block Puzzle – home screen"
