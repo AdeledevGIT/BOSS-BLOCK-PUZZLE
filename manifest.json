@@ -8,24 +8,24 @@
     "theme_color": "#000000",
     "icons": [
         {
-            "src": "Screenshot.png",
+            "src": "Screenshot.jpeg",
             "sizes": "1280x800",
-            "type": "image/png",
-            "form_factor": "wide",
+            "type": "image/jpeg",
+            "form_factor": "narrow",
             "label": "Boss Block Puzzle – home screen"
         },
         {
-            "src": "Screenshot2.png",
+            "src": "Screenshot2.jpeg",
             "sizes": "1280x800",
-            "type": "image/png",
-            "form_factor": "wide",
+            "type": "image/jpeg",
+            "form_factor": "narrow",
             "label": "Boss Block Puzzle – home screen"
         },
         {
-            "src": "Screenshot3.png",
+            "src": "Screenshot1.jpeg",
             "sizes": "1280x800",
-            "type": "image/png",
-            "form_factor": "wide",
+            "type": "image/jpeg",
+            "form_factor": "narrow",
             "label": "Boss Block Puzzle – home screen"
         },
         {
