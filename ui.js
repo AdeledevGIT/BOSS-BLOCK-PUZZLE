@@ -94,7 +94,11 @@ class UIManager {
         this.hideAllModals();
 
         if (name === 'game') {
-            this.restartGame();
+            if (window.gameInstance && window.gameInstance.isGameOver) {
+                this.restartGame();
+            } else if (window.gameInstance) {
+                window.gameInstance.setupCanvas();
+            }
         } else if (name === 'home') {
             this.updateHomeStats();
         }
@@ -322,7 +326,12 @@ class UIManager {
                 window.gameInstance.grid = Array(8).fill().map(() => Array(8).fill(0));
                 window.gameInstance.score = 0;
                 window.gameInstance.isGameOver = false;
+                window.gameInstance.comboCount = 0;
+                window.gameInstance.currentTheme = 0;
+                window.gameInstance.lastClearTheme = null;
                 window.gameInstance.activeShapes = [null, null, null];
+                
+                window.gameInstance.switchToTheme(0);
                 window.gameInstance.generateShapes();
                 window.gameInstance.updateUI();
             });

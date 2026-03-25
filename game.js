@@ -944,30 +944,40 @@ class Game {
             score: this.score,
             activeShapes: this.activeShapes,
             currentTheme: this.currentTheme,
-            lastClearTheme: this.lastClearTheme
+            lastClearTheme: this.lastClearTheme,
+            isGameOver: this.isGameOver
         };
         localStorage.setItem('boss_block_game_state', JSON.stringify(state));
     }
 
     loadState() {
-        const saved = localStorage.getItem('boss_block_game_state');
-        if (saved) {
-            const state = JSON.parse(saved);
-            this.grid = state.grid;
-            this.score = state.score;
-            this.activeShapes = state.activeShapes;
-            this.currentTheme = state.currentTheme || 0;
-            this.lastClearTheme = state.lastClearTheme || null;
-            
-            // Apply correct theme on load
-            this.switchToTheme(this.currentTheme);
-            
-            this.updateUI();
-            
-            // Re-render shapes in slots
-            this.activeShapes.forEach((shape, i) => {
-                if (shape) this.renderShapeSlot(i);
-            });
+        try {
+            const saved = localStorage.getItem('boss_block_game_state');
+            if (saved) {
+                const state = JSON.parse(saved);
+                this.grid = state.grid || Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+                this.score = state.score || 0;
+                this.activeShapes = state.activeShapes || [null, null, null];
+                this.currentTheme = state.currentTheme || 0;
+                this.lastClearTheme = state.lastClearTheme || null;
+                this.isGameOver = state.isGameOver || false;
+                
+                // Apply correct theme on load
+                this.switchToTheme(this.currentTheme);
+                this.updateUI();
+                
+                // Re-render shapes in slots
+                this.activeShapes.forEach((shape, i) => {
+                    if (shape) this.renderShapeSlot(i);
+                });
+            }
+        } catch (err) {
+            console.error("Failed to load game state:", err);
+            // Fallback to fresh state if anything goes wrong
+            this.grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+            this.score = 0;
+            this.activeShapes = [null, null, null];
+            this.isGameOver = false;
         }
     }
 
