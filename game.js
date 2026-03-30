@@ -236,6 +236,13 @@ class AudioManager {
         }, 320); // 320ms per step = nice, calming pace
     }
     
+    stopBGM() {
+        if (this.bgmInterval) {
+            clearInterval(this.bgmInterval);
+            this.bgmInterval = null;
+        }
+    }
+    
     playPluck(freq, volume, duration) {
         if (this.isMuted || !this.ctx) return;
         
@@ -299,6 +306,35 @@ class AudioManager {
             osc.stop(now + (i * 0.08) + 1.2);
         }
     }
+
+    playGameOverSound() {
+        if (this.isMuted || !this.ctx) return;
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+        
+        const now = this.ctx.currentTime;
+        // Descending sad notes
+        const notes = [440.00, 392.00, 349.23, 329.63, 261.63]; 
+        
+        notes.forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            osc.type = 'triangle'; // Slightly harsher than sine for game over
+            osc.frequency.setValueAtTime(freq, now + (i * 0.15));
+            
+            gain.gain.setValueAtTime(0, now + (i * 0.15));
+            gain.gain.linearRampToValueAtTime(0.2, now + (i * 0.15) + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.15) + 0.6);
+            
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            
+            osc.start(now + (i * 0.15));
+            osc.stop(now + (i * 0.15) + 0.6);
+        });
+    }
 }
 
 class Game {
@@ -322,6 +358,15 @@ class Game {
         this.draggingShape = null;
         this.draggingFromSlot = -1;
         this.isGameOver = false;
+        this.reviveUsed = false; // Legacy — still used for some checks but not for limiting
+        this.lifetimeFreeRefreshes = parseInt(localStorage.getItem('boss_block_lifetime_free_refreshes')) ?? 3;
+        if (isNaN(this.lifetimeFreeRefreshes)) this.lifetimeFreeRefreshes = 3;
+        
+        this.lifetimeFreeRevives = parseInt(localStorage.getItem('boss_block_lifetime_free_revives')) ?? 3;
+        if (isNaN(this.lifetimeFreeRevives)) this.lifetimeFreeRevives = 3;
+
+        this.currentGameRefreshes = 0; 
+        this.currentGameRevives = 0; 
         this.currentTheme = 0; // 0=night, 1=day, 2=ocean, 3=desert, 4=space, 5=village, 6=forest, 7=sunset, 8=cloudy, 9=crystal, 10=aurora
         this.lastClearTheme = null; // Prevent multiple theme switches on same clear
 
@@ -336,6 +381,7 @@ class Game {
         this.generateShapes();
         this.addEventListeners();
         this.loadLocalHighScore();
+        this.updateRefreshButtonUI();
         this.animate();
         console.log("🎮 Game initialized.");
     }
@@ -461,6 +507,7 @@ class Game {
                 this.activeShapes[i] = JSON.parse(JSON.stringify(selectedShape));
                 this.renderShapeSlot(i);
             }
+            this.saveState();
         }
     }
 
@@ -635,6 +682,17 @@ class Game {
         window.addEventListener('touchend', (e) => this.stopDragging(e));
         
         window.addEventListener('resize', () => this.setupCanvas());
+
+        // Monetization Listeners
+        const reviveBtn = document.getElementById('revive-btn');
+        if (reviveBtn) {
+            reviveBtn.addEventListener('click', () => this.handleReviveClick());
+        }
+
+        const refreshBtn = document.getElementById('refresh-shapes-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => this.handleRefreshClick());
+        }
     }
 
     startDragging(e, slotIndex) {
@@ -920,11 +978,28 @@ class Game {
 
         if (!canMove && this.activeShapes.some(s => s !== null)) {
             this.isGameOver = true;
+            this.audioManager.stopBGM();
+            this.audioManager.playGameOverSound();
             localStorage.setItem('boss_block_last_score', this.score);
             document.getElementById('overlay').classList.remove('hidden');
-            document.getElementById('game-over-modal').classList.remove('hidden');
+            
+            const goModal = document.getElementById('game-over-modal');
+            goModal.classList.remove('hidden');
+            
+            // Show Revive button if not used this session (max 3 times per game)
+            const reviveBtn = document.getElementById('revive-btn');
+            if (reviveBtn) {
+                if (this.currentGameRevives < 3) {
+                    reviveBtn.classList.remove('hidden');
+                    this.updateReviveButtonUI();
+                } else {
+                    reviveBtn.classList.add('hidden');
+                }
+            }
+
             this.finalScoreDisplay.textContent = this.score;
             this.handleHighScores();
+            this.saveState(); // Crucial: Save the isGameOver: true state!
         }
     }
 
@@ -945,9 +1020,13 @@ class Game {
             activeShapes: this.activeShapes,
             currentTheme: this.currentTheme,
             lastClearTheme: this.lastClearTheme,
-            isGameOver: this.isGameOver
+            isGameOver: this.isGameOver,
+            currentGameRefreshes: this.currentGameRefreshes,
+            currentGameRevives: this.currentGameRevives
         };
         localStorage.setItem('boss_block_game_state', JSON.stringify(state));
+        localStorage.setItem('boss_block_lifetime_free_refreshes', this.lifetimeFreeRefreshes);
+        localStorage.setItem('boss_block_lifetime_free_revives', this.lifetimeFreeRevives);
     }
 
     loadState() {
@@ -961,6 +1040,33 @@ class Game {
                 this.currentTheme = state.currentTheme || 0;
                 this.lastClearTheme = state.lastClearTheme || null;
                 this.isGameOver = state.isGameOver || false;
+                this.currentGameRefreshes = state.currentGameRefreshes || 0;
+                this.currentGameRevives = state.currentGameRevives || 0;
+                
+                // Lifetime counts
+                this.lifetimeFreeRefreshes = parseInt(localStorage.getItem('boss_block_lifetime_free_refreshes')) ?? 3;
+                if (isNaN(this.lifetimeFreeRefreshes)) this.lifetimeFreeRefreshes = 3;
+
+                this.lifetimeFreeRevives = parseInt(localStorage.getItem('boss_block_lifetime_free_revives')) ?? 3;
+                if (isNaN(this.lifetimeFreeRevives)) this.lifetimeFreeRevives = 3;
+                
+                // If game was over, show the modal again
+                if (this.isGameOver) {
+                    document.getElementById('overlay').classList.remove('hidden');
+                    const goModal = document.getElementById('game-over-modal');
+                    goModal.classList.remove('hidden');
+                    
+                    const reviveBtn = document.getElementById('revive-btn');
+                    if (reviveBtn) {
+                        if (this.currentGameRevives < 3) {
+                            reviveBtn.classList.remove('hidden');
+                            this.updateReviveButtonUI();
+                        } else {
+                            reviveBtn.classList.add('hidden');
+                        }
+                    }
+                    this.finalScoreDisplay.textContent = this.score;
+                }
                 
                 // Apply correct theme on load
                 this.switchToTheme(this.currentTheme);
@@ -1027,9 +1133,147 @@ class Game {
         
         // Update world high run locally (fall-back sync)
         if (this.score > this.worldHighRun) {
+            this.lifetimeFreeRefreshes += 5;
+            this.lifetimeFreeRevives += 5;
+            console.log("🏆 WORLD RECORD BROKEN! Rewarding player with 5 Refreshes and 5 Revives.");
+            this.showThemeChangeMessage("🏆 WORLD RECORD BROKEN! BONUS: +5 REFRESHES & REVIVES!");
+            
             this.worldHighRun = this.score;
             localStorage.setItem('boss_block_worldrecord', this.score);
+            this.saveState(); // Ensure rewards are saved immediately
         }
+    }
+    // --- Monetization Methods ---
+
+    async handleReviveClick() {
+        const reviveBtn = document.getElementById('revive-btn');
+        if (this.currentGameRevives >= 3) return;
+
+        if (this.lifetimeFreeRevives > 0) {
+            // Use free revive
+            this.lifetimeFreeRevives--;
+            this.currentGameRevives++;
+            this.reviveGame();
+            this.updateReviveButtonUI();
+        } else {
+            // Watch Ad
+            reviveBtn.disabled = true;
+            reviveBtn.innerHTML = "<span>Loading Ad...</span>";
+
+            await new Promise(r => setTimeout(r, 2000)); // 2 sec ad simulation
+
+            this.currentGameRevives++;
+            this.reviveGame();
+            
+            reviveBtn.disabled = false;
+            this.updateReviveButtonUI();
+        }
+    }
+
+    updateReviveButtonUI() {
+        const reviveBtn = document.getElementById('revive-btn');
+        if (!reviveBtn) return;
+        
+        const totalLeftThisGame = 3 - this.currentGameRevives;
+        
+        if (this.lifetimeFreeRevives > 0) {
+            reviveBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;margin-right:6px;"><path d="M17,10.5V7c0-0.55-0.45-1-1-1H4C3.45,6,3,6.45,3,7v10c0,0.55,0.45,1,1,1h12c0.55,0,1-0.45,1-1v-3.5l4,4v-11L17,10.5z"/></svg>Free Revive (${this.lifetimeFreeRevives} Left)`;
+            reviveBtn.classList.add('gold-btn');
+        } else {
+            reviveBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;margin-right:6px;"><path d="M17,10.5V7c0-0.55-0.45-1-1-1H4C3.45,6,3,6.45,3,7v10c0,0.55,0.45,1,1,1h12c0.55,0,1-0.45,1-1v-3.5l4,4v-11L17,10.5z"/></svg>Watch Ad (${totalLeftThisGame} left)`;
+            reviveBtn.classList.remove('gold-btn');
+        }
+    }
+
+    reviveGame() {
+        this.isGameOver = false;
+        
+        // Reward: Clear 4x4 area in the center to give player a big chance
+        // We'll slightly randomise the center so it clears where most pieces are if possible? 
+        // No, keep it consistent for Boss Block
+        const start = 2;
+        const end = 6;
+        for (let r = start; r < end; r++) {
+            for (let c = start; c < end; c++) {
+                this.grid[r][c] = 0;
+            }
+        }
+
+        // Hide Game Over UI
+        document.getElementById('overlay').classList.add('hidden');
+        document.getElementById('game-over-modal').classList.add('hidden');
+        
+        this.audioManager.init(); // Ensure BGM restarts
+        this.audioManager.startBGM();
+        
+        this.showThemeChangeMessage("🔥 REVIVED! GO!");
+        this.audioManager.playReactionSound(5); // Great sound
+        this.updateUI();
+        this.saveState();
+    }
+
+    async handleRefreshClick() {
+        if (this.isGameOver) return;
+        
+        const refreshBtn = document.getElementById('refresh-shapes-btn');
+        
+        // Per-game limit: Maximum 3 refreshes total
+        if (this.currentGameRefreshes >= 3) {
+            this.showThemeChangeMessage("🚫 NO MORE REFRESHES!");
+            return;
+        }
+
+        if (this.lifetimeFreeRefreshes > 0) {
+            // Use one of the 3 lifetime free refreshes
+            this.lifetimeFreeRefreshes--;
+            this.currentGameRefreshes++;
+            this.refreshShapes();
+            this.updateRefreshButtonUI();
+        } else {
+            // Watch ad
+            refreshBtn.classList.add('loading');
+            refreshBtn.title = "Loading Ad...";
+            
+            // Simulate Ad
+            await new Promise(r => setTimeout(r, 2000));
+            
+            this.currentGameRefreshes++;
+            this.refreshShapes();
+            refreshBtn.classList.remove('loading');
+            this.updateRefreshButtonUI();
+        }
+    }
+
+    updateRefreshButtonUI() {
+        const refreshBtn = document.getElementById('refresh-shapes-btn');
+        if (!refreshBtn) return;
+        
+        const totalLeftThisGame = 3 - this.currentGameRefreshes;
+        
+        if (totalLeftThisGame <= 0) {
+            refreshBtn.classList.add('hidden'); // Disable if used up in this game
+            return;
+        }
+        
+        refreshBtn.classList.remove('hidden');
+
+        if (this.lifetimeFreeRefreshes > 0) {
+            refreshBtn.title = `Refresh Pieces (${this.lifetimeFreeRefreshes} Lifetime Free Left)`;
+            refreshBtn.setAttribute('data-count', this.lifetimeFreeRefreshes);
+            refreshBtn.classList.add('premium');
+        } else {
+            refreshBtn.title = `Refresh Pieces (Watch Ad - ${totalLeftThisGame} left)`;
+            refreshBtn.removeAttribute('data-count');
+            refreshBtn.classList.remove('premium');
+        }
+    }
+
+    refreshShapes() {
+        this.activeShapes = [null, null, null];
+        this.generateShapes();
+        this.audioManager.playReactionSound(2);
+        this.showThemeChangeMessage("✨ PIECES REFRESHED");
+        this.saveState();
     }
 }
 

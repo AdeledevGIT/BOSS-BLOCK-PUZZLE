@@ -35,7 +35,7 @@ class UIManager {
         // Modal Toggling
         document.getElementById('home-auth-btn').addEventListener('click', () => this.showModal('auth'));
         document.getElementById('home-leaderboard-btn').addEventListener('click', () => this.showModal('leaderboard'));
-        
+
         // Close buttons
         document.querySelectorAll('.close-btn').forEach(btn => {
             btn.addEventListener('click', () => this.hideAllModals());
@@ -52,7 +52,7 @@ class UIManager {
         if (!localStorage.getItem('boss_block_username')) {
             localStorage.setItem('boss_block_username', 'user' + Math.floor(Math.random() * 10000000));
         }
-        
+
         const displayName = document.getElementById('home-player-name');
         if (displayName) displayName.textContent = localStorage.getItem('boss_block_username');
 
@@ -65,10 +65,10 @@ class UIManager {
 
         // Email Auth Toggles and Handlers
         this.isSignUpMode = false;
-        
+
         const authActionBtn = document.getElementById('auth-action-btn');
         if (authActionBtn) authActionBtn.addEventListener('click', () => this.handleEmailAuth());
-        
+
         const authToggleLink = document.getElementById('auth-toggle-link');
         if (authToggleLink) {
             authToggleLink.addEventListener('click', (e) => {
@@ -94,10 +94,16 @@ class UIManager {
         this.hideAllModals();
 
         if (name === 'game') {
-            if (window.gameInstance && window.gameInstance.isGameOver) {
+            // Memory: Only restart if the previous game is over. Otherwise, continue.
+            if (!window.gameInstance || window.gameInstance.isGameOver) {
                 this.restartGame();
-            } else if (window.gameInstance) {
-                window.gameInstance.setupCanvas();
+            } else {
+                // Ensure UI is up to date if we are continuing
+                window.gameInstance.updateUI();
+                // If continue, make sure modals are hidden
+                this.hideAllModals();
+                // Ensure music is running (browsers may block autoplay until this click)
+                window.gameInstance.audioManager.init();
             }
         } else if (name === 'home') {
             this.updateHomeStats();
@@ -108,10 +114,10 @@ class UIManager {
         const highScore = localStorage.getItem('boss_block_highscore') || '0';
         const lastScore = localStorage.getItem('boss_block_last_score') || '0';
         const worldRecord = localStorage.getItem('boss_block_worldrecord') || highScore;
-        
+
         const worldEl = document.getElementById('home-world-record');
         if (worldEl) worldEl.textContent = parseInt(worldRecord).toString().padStart(6, '0');
-        
+
         const lastEl = document.getElementById('home-last-score');
         if (lastEl) lastEl.textContent = parseInt(lastScore).toString().padStart(6, '0');
     }
@@ -120,7 +126,7 @@ class UIManager {
         this.hideAllModals();
         this.overlay.classList.remove('hidden');
         this.modals[name].classList.remove('hidden');
-        
+
         if (name === 'leaderboard') {
             this.fetchLeaderboard();
         }
@@ -133,7 +139,7 @@ class UIManager {
 
     async handleEmailAuth() {
         if (!window.isFirebaseReady()) return;
-        
+
         const email = document.getElementById('auth-email').value.trim();
         const pwd = document.getElementById('auth-password').value;
         if (!email || !pwd) {
@@ -154,7 +160,7 @@ class UIManager {
                     } catch (linkError) {
                         if (linkError.code === 'auth/email-already-in-use') {
                             await window.auth.signInWithCredential(credential);
-                        } else {    
+                        } else {
                             throw linkError;
                         }
                     }
@@ -164,7 +170,7 @@ class UIManager {
             } else {
                 await window.auth.signInWithEmailAndPassword(email, pwd);
             }
-            
+
             this.hideAllModals();
             document.getElementById('auth-email').value = '';
             document.getElementById('auth-password').value = '';
@@ -210,7 +216,7 @@ class UIManager {
                     if (docSnap.exists) {
                         fbScore = docSnap.data().score || 0;
                         const fbName = docSnap.data().name;
-                        
+
                         // If Firebase has a nice name but the local context doesn't have it, pull it down!
                         const localName = localStorage.getItem('boss_block_username') || '';
                         if (fbName && fbName !== 'Anonymous Player' && (!localName.startsWith('user') || localName === '')) {
@@ -219,7 +225,7 @@ class UIManager {
                             if (nameDisplay) nameDisplay.textContent = fbName;
                         }
                     }
-                    
+
                     const localScore = parseInt(localStorage.getItem('boss_block_highscore')) || 0;
                     const finalName = localStorage.getItem('boss_block_username') || user.displayName || user.email || 'Anonymous Player';
 
@@ -266,7 +272,7 @@ class UIManager {
                 .get();
 
             listContainer.innerHTML = '';
-            
+
             if (snapshot.empty) {
                 listContainer.innerHTML = '<p style="text-align:center;color:#475569;padding:2rem 0">No world records yet!<br>Be the first to set one.</p>';
                 return;
@@ -279,20 +285,20 @@ class UIManager {
                 window.gameInstance.worldHighRun = topScore;
                 window.gameInstance.updateUI();
             }
-            
+
             // Also update home screen directly if visible
             const worldEl = document.getElementById('home-world-record');
             if (worldEl) worldEl.textContent = topScore.toString().padStart(6, '0');
 
-            const medals = ['🥇','🥈','🥉'];
+            const medals = ['🥇', '🥈', '🥉'];
 
             snapshot.docs.forEach((doc, index) => {
                 const data = doc.data();
                 const item = document.createElement('div');
                 item.className = 'rank-item';
-                
+
                 const isMe = window.auth && window.auth.currentUser && window.auth.currentUser.uid === doc.id;
-                
+
                 const medal = index < 3 ? medals[index] : '';
                 item.innerHTML = `
                     <span class="rank-medal">${medal || ''}</span>
@@ -323,17 +329,18 @@ class UIManager {
         if (window.gameInstance) {
             // Pass reset logic as onReady callback — runs after canvas is fully sized
             window.gameInstance.setupCanvas(() => {
+                window.gameInstance.audioManager.init(); // Initialize on click
                 window.gameInstance.grid = Array(8).fill().map(() => Array(8).fill(0));
                 window.gameInstance.score = 0;
                 window.gameInstance.isGameOver = false;
-                window.gameInstance.comboCount = 0;
-                window.gameInstance.currentTheme = 0;
-                window.gameInstance.lastClearTheme = null;
+                window.gameInstance.currentGameRefreshes = 0;
+                window.gameInstance.currentGameRevives = 0;
                 window.gameInstance.activeShapes = [null, null, null];
-                
-                window.gameInstance.switchToTheme(0);
+                window.gameInstance.audioManager.stopBGM(); // Reset any existing interval
+                window.gameInstance.audioManager.startBGM(); // Start fresh
                 window.gameInstance.generateShapes();
                 window.gameInstance.updateUI();
+                window.gameInstance.updateRefreshButtonUI();
             });
         }
     }
@@ -353,20 +360,20 @@ class UIManager {
         if (newName && newName.trim().length > 0) {
             const cleanName = newName.trim().substring(0, 15);
             localStorage.setItem('boss_block_username', cleanName);
-            
+
             if (this.elementToUpdateWithNewName) {
                 this.elementToUpdateWithNewName.innerHTML = `${cleanName} <span style="opacity:0.6;font-size:0.8em;margin-left:4px;">✎</span>`;
             }
             const homeName = document.getElementById('home-player-name');
             if (homeName) homeName.textContent = cleanName;
-            
+
             if (window.isFirebaseReady() && window.auth && window.auth.currentUser) {
                 try {
                     await window.db.collection('leaderboard').doc(window.auth.currentUser.uid).set({
                         name: cleanName,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
-                } catch(err) {
+                } catch (err) {
                     console.error('Failed to update name online:', err);
                 }
             }
@@ -381,3 +388,4 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 export default UIManager;
+
