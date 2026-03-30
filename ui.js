@@ -24,6 +24,8 @@ class UIManager {
         this.updateAuthStatus();
         this.fetchLeaderboard();
         this.updateHomeStats();
+        this.setupWorldRecordListener();
+        this.setupEngagementReminders();
     }
 
     attachEventListeners() {
@@ -257,6 +259,109 @@ class UIManager {
                 });
             }
         });
+    }
+
+    setupWorldRecordListener() {
+        if (!window.isFirebaseReady()) return;
+        
+        // Listen for new world records in real-time
+        window.db.collection('leaderboard')
+            .orderBy('score', 'desc')
+            .limit(1)
+            .onSnapshot(snapshot => {
+                if (!snapshot.empty) {
+                    const top = snapshot.docs[0].data();
+                    const topScore = top.score || 0;
+                    const topName = top.name || 'Anonymous';
+                    
+                    // Only alert if it's a NEW record we haven't seen in this session
+                    const lastWorld = parseInt(localStorage.getItem('boss_block_worldrecord')) || 0;
+                    if (topScore > lastWorld) {
+                        localStorage.setItem('boss_block_worldrecord', topScore);
+                        this.triggerEngagementNotification(
+                            "🏆 NEW WORLD RECORD!", 
+                            `${topName} just set a record of ${topScore.toLocaleString()}! Can you beat it?`
+                        );
+                        
+                        // Update game UI if open
+                        if (window.gameInstance) {
+                            window.gameInstance.worldHighRun = topScore;
+                            window.gameInstance.updateUI();
+                        }
+                    }
+                }
+            });
+    }
+
+    setupEngagementReminders() {
+        // Request Permission
+        if ('Notification' in window && Notification.permission === 'default') {
+            document.addEventListener('click', () => {
+                Notification.requestPermission();
+            }, { once: true });
+        }
+
+        // --- Sweet & Inviting Alerts ---
+        const alerts = {
+            m30: { t: "🌟 Your high score misses you!", b: "Come back and see if you can top it today! ✨" },
+            h3: { t: "☕ Coffee & Blocks?", b: "Time for a little break? Boss Block is the perfect way to unwind." },
+            h24: { t: "✨ We've missed your strategy!", b: "The grid is clear and waiting for your brilliant moves. Come play! 🌸" },
+            d3: { t: "🌈 Your Bonuses are waiting!", b: "Break the record today and get 10 bonus uses! We've missed you. ❤️" }
+        };
+
+        // 1. Check for 'Welcome Back' message on entry if they were gone for > 2 days
+        const lastSession = parseInt(localStorage.getItem('boss_block_last_played')) || Date.now();
+        const diffDays = (Date.now() - lastSession) / (1000 * 60 * 60 * 24);
+        if (diffDays >= 2) {
+            setTimeout(() => {
+                this.showThemeChangeMessage("🌸 WELCOME BACK! WE MISSED YOU!");
+            }, 2000);
+        }
+        localStorage.setItem('boss_block_last_played', Date.now());
+
+        // 2. Set multi-stage timers for backgrounded tab
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                // Stage 1: 30 minutes
+                this.timer30m = setTimeout(() => this.triggerEngagementNotification(alerts.m30.t, alerts.m30.b), 1000 * 60 * 30);
+                // Stage 2: 3 hours
+                this.timer3h = setTimeout(() => this.triggerEngagementNotification(alerts.h3.t, alerts.h3.b), 1000 * 60 * 180);
+                // Stage 3: 24 hours (Note: Browser might throttle this, but we try)
+                this.timer24h = setTimeout(() => this.triggerEngagementNotification(alerts.h24.t, alerts.h24.b), 1000 * 60 * 60 * 24);
+            } else {
+                localStorage.setItem('boss_block_last_played', Date.now());
+                clearTimeout(this.timer30m);
+                clearTimeout(this.timer3h);
+                clearTimeout(this.timer24h);
+            }
+        });
+    }
+
+    showThemeChangeMessage(msg) {
+        if (window.gameInstance) {
+            window.gameInstance.showThemeChangeMessage(msg);
+        }
+    }
+
+    triggerEngagementNotification(title, body) {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        
+        // Use Service Worker if available for better background handling
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.ready.then(reg => {
+                reg.showNotification(title, {
+                    body: body,
+                    icon: 'icon.svg', // or icon1.png
+                    badge: 'icon.svg',
+                    vibrate: [200, 100, 200],
+                    tag: 'boss-block-alert',
+                    data: { url: window.location.origin }
+                });
+            });
+        } else {
+            // Fallback for simple local notification
+            new Notification(title, { body, icon: 'icon.svg' });
+        }
     }
 
     async fetchLeaderboard() {
