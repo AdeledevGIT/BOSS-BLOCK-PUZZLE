@@ -26,6 +26,7 @@ class UIManager {
         this.updateHomeStats();
         this.setupWorldRecordListener();
         this.setupEngagementReminders();
+        this.handleSplashScreen();
     }
 
     attachEventListeners() {
@@ -341,6 +342,30 @@ class UIManager {
         if (window.gameInstance) {
             window.gameInstance.showThemeChangeMessage(msg);
         }
+    }
+
+    handleSplashScreen() {
+        const splash = document.getElementById('splash-screen');
+        const video = document.getElementById('splash-video');
+        
+        if (!splash || !video) return;
+
+        const dismiss = () => {
+            if (!splash.classList.contains('fade-out')) {
+                splash.classList.add('fade-out');
+                setTimeout(() => splash.remove(), 1000);
+            }
+        };
+
+        // Listen for video to end or fail
+        video.onended = dismiss;
+        video.onerror = dismiss;
+        
+        // Safety timeout in case of slow load or autoplay block
+        setTimeout(dismiss, 5000);
+        
+        // Ensure playback started (browsers sometimes block autoplay)
+        video.play().catch(dismiss);
     }
 
     triggerEngagementNotification(title, body) {
