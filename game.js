@@ -12,14 +12,21 @@ const COMBO_POINTS = 100;
 const MEDIUM_SHAPES = [
     { name: 'T', matrix: [[0, 1, 0], [1, 1, 1]], colorId: 1 },
     { name: 'Z', matrix: [[1, 1, 0], [0, 1, 1]], colorId: 2 },
-    { name: 'L', matrix: [[1, 0], [1, 0], [1, 1]], colorId: 5 }
+    { name: 'L', matrix: [[1, 0], [1, 0], [1, 1]], colorId: 5 },
+    { name: 'S', matrix: [[0, 1, 1], [1, 1, 0]], colorId: 6 },
+    { name: 'L_rev', matrix: [[0, 1], [0, 1], [1, 1]], colorId: 4 },
+    { name: 'corner3', matrix: [[1, 1, 1], [1, 0, 0], [1, 0, 0]], colorId: 5 }
 ];
 
 // Harder shapes for higher difficulty
 const ELITE_SHAPES = [
     { name: 'cross', matrix: [[0, 1, 0], [1, 1, 1], [0, 1, 0]], colorId: 1 },
     { name: 'bigL', matrix: [[1, 0, 0], [1, 0, 0], [1, 1, 1]], colorId: 4 },
-    { name: 'plus', matrix: [[1, 1, 1], [1, 1, 1], [1, 1, 1]], colorId: 3 } // 3x3 square is actually very hard
+    { name: 'plus', matrix: [[1, 1, 1], [1, 1, 1], [1, 1, 1]], colorId: 3 },
+    { name: 'hollow', matrix: [[1, 1, 1], [1, 0, 1], [1, 1, 1]], colorId: 2 },
+    { name: 'bigT', matrix: [[1, 1, 1], [0, 1, 0], [0, 1, 0]], colorId: 5 },
+    { name: 'U', matrix: [[1, 0, 1], [1, 1, 1]], colorId: 6 },
+    { name: 'long5', matrix: [[1, 1, 1, 1, 1]], colorId: 1 }
 ];
 
 /* Color Palette for Blocks — Theme-aware colors */
@@ -158,7 +165,9 @@ const SHAPES = [
     { name: 'line2', matrix: [[1, 1]], colorId: 2 },
     { name: 'line3', matrix: [[1, 1, 1]], colorId: 3 },
     { name: 'square2', matrix: [[1, 1], [1, 1]], colorId: 4 },
-    { name: 'I', matrix: [[1], [1], [1], [1]], colorId: 6 }
+    { name: 'I', matrix: [[1], [1], [1], [1]], colorId: 6 },
+    { name: 'corner2', matrix: [[1, 1], [1, 0]], colorId: 1 },
+    { name: 'v_line2', matrix: [[1], [1]], colorId: 5 }
 ];
 
 class AudioManager {
@@ -481,6 +490,22 @@ class Game {
         }
     }
 
+    getRandomShapeByTier() {
+        const tier = this.getDifficultyTier();
+        const rand = Math.random();
+        let selectedShape;
+        
+        if (rand < tier.easyChance) {
+            selectedShape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+        } else if (rand < tier.easyChance + tier.mediumChance) {
+            selectedShape = MEDIUM_SHAPES[Math.floor(Math.random() * MEDIUM_SHAPES.length)];
+        } else {
+            selectedShape = ELITE_SHAPES[Math.floor(Math.random() * ELITE_SHAPES.length)];
+        }
+        
+        return JSON.parse(JSON.stringify(selectedShape));
+    }
+
     generateShapes() {
         let hasRemaining = this.activeShapes.some(s => s !== null);
         if (!hasRemaining) {
@@ -490,21 +515,7 @@ class Game {
             console.log(`🎮 Difficulty Tier (Score: ${this.score}): Easy=${tier.easyChance.toFixed(2)}, Medium=${tier.mediumChance.toFixed(2)}, Elite=${tier.eliteChance.toFixed(2)}`);
             
             for (let i = 0; i < 3; i++) {
-                const rand = Math.random();
-                let selectedShape;
-                
-                if (rand < tier.easyChance) {
-                    // Easy shape
-                    selectedShape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
-                } else if (rand < tier.easyChance + tier.mediumChance) {
-                    // Medium shape
-                    selectedShape = MEDIUM_SHAPES[Math.floor(Math.random() * MEDIUM_SHAPES.length)];
-                } else {
-                    // Elite shape
-                    selectedShape = ELITE_SHAPES[Math.floor(Math.random() * ELITE_SHAPES.length)];
-                }
-                
-                this.activeShapes[i] = JSON.parse(JSON.stringify(selectedShape));
+                this.activeShapes[i] = this.getRandomShapeByTier();
                 this.renderShapeSlot(i);
             }
             this.saveState();
@@ -1269,10 +1280,23 @@ class Game {
     }
 
     refreshShapes() {
-        this.activeShapes = [null, null, null];
-        this.generateShapes();
-        this.audioManager.playReactionSound(2);
-        this.showThemeChangeMessage("✨ PIECES REFRESHED");
+        // Only refresh the pieces that are currently available in the slots
+        let refreshedCount = 0;
+        this.activeShapes.forEach((shape, i) => {
+            if (shape !== null) {
+                this.activeShapes[i] = this.getRandomShapeByTier();
+                this.renderShapeSlot(i);
+                refreshedCount++;
+            }
+        });
+
+        if (refreshedCount > 0) {
+            this.audioManager.playReactionSound(2);
+            this.showThemeChangeMessage("✨ PIECES REFRESHED");
+        } else {
+            this.showThemeChangeMessage("✨ NO PIECES TO REFRESH");
+        }
+        
         this.saveState();
     }
 }
