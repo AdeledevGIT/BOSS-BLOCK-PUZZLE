@@ -465,6 +465,7 @@ class UIManager {
                 window.gameInstance.isGameOver = false;
                 window.gameInstance.currentGameRefreshes = 0;
                 window.gameInstance.currentGameRevives = 0;
+                window.gameInstance.worldRecordBrokenInGame = false;
                 window.gameInstance.activeShapes = [null, null, null];
                 window.gameInstance.audioManager.stopBGM(); // Reset any existing interval
                 window.gameInstance.audioManager.startBGM(); // Start fresh
