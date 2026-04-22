@@ -378,6 +378,7 @@ class Game {
         this.currentGameRevives = 0; 
         this.currentTheme = 0; // 0=night, 1=day, 2=ocean, 3=desert, 4=space, 5=village, 6=forest, 7=sunset, 8=cloudy, 9=crystal, 10=aurora
         this.lastClearTheme = null; // Prevent multiple theme switches on same clear
+        this.worldRecordBrokenInGame = false;
 
         this.audioManager = new AudioManager();
 
@@ -1033,7 +1034,8 @@ class Game {
             lastClearTheme: this.lastClearTheme,
             isGameOver: this.isGameOver,
             currentGameRefreshes: this.currentGameRefreshes,
-            currentGameRevives: this.currentGameRevives
+            currentGameRevives: this.currentGameRevives,
+            worldRecordBrokenInGame: this.worldRecordBrokenInGame
         };
         localStorage.setItem('boss_block_game_state', JSON.stringify(state));
         localStorage.setItem('boss_block_lifetime_free_refreshes', this.lifetimeFreeRefreshes);
@@ -1053,6 +1055,7 @@ class Game {
                 this.isGameOver = state.isGameOver || false;
                 this.currentGameRefreshes = state.currentGameRefreshes || 0;
                 this.currentGameRevives = state.currentGameRevives || 0;
+                this.worldRecordBrokenInGame = state.worldRecordBrokenInGame || false;
                 
                 // Lifetime counts
                 this.lifetimeFreeRefreshes = parseInt(localStorage.getItem('boss_block_lifetime_free_refreshes')) ?? 3;
@@ -1095,6 +1098,7 @@ class Game {
             this.score = 0;
             this.activeShapes = [null, null, null];
             this.isGameOver = false;
+            this.worldRecordBrokenInGame = false;
         }
     }
 
@@ -1144,14 +1148,17 @@ class Game {
         
         // Update world high run locally (fall-back sync)
         if (this.score > this.worldHighRun) {
-            this.lifetimeFreeRefreshes += 5;
-            this.lifetimeFreeRevives += 5;
-            console.log("🏆 WORLD RECORD BROKEN! Rewarding player with 5 Refreshes and 5 Revives.");
-            this.showThemeChangeMessage("🏆 WORLD RECORD BROKEN! BONUS: +5 REFRESHES & REVIVES!");
+            if (!this.worldRecordBrokenInGame) {
+                this.lifetimeFreeRefreshes += 5;
+                this.lifetimeFreeRevives += 5;
+                console.log("🏆 WORLD RECORD BROKEN! Rewarding player with 5 Refreshes and 5 Revives.");
+                this.showThemeChangeMessage("🏆 WORLD RECORD BROKEN! BONUS: +5 REFRESHES & REVIVES!");
+                this.worldRecordBrokenInGame = true;
+            }
             
             this.worldHighRun = this.score;
             localStorage.setItem('boss_block_worldrecord', this.score);
-            this.saveState(); // Ensure rewards are saved immediately
+            this.saveState(); // Ensure rewards and record state are saved immediately
         }
     }
     // --- Monetization Methods ---
